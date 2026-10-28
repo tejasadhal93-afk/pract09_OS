@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OS Algorithm Visualizer – Banking &amp; ATM System</title>
+  <meta name="description" content="OS Algorithm Visualizer for Banking & ATM Transaction Processing – CPU Scheduling, Producer–Consumer, Banker's Algorithm, Memory Management">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ======================================================
+     APP HEADER
+     ====================================================== -->
+<header id="app-header" role="banner">
+  <div style="flex:1">
+    <h1>OS Algorithm Visualizer – Banking &amp; ATM Transaction Processing System</h1>
+    <div class="subtitle">
+      Assignment 3 / Practical 9 · Problem 5 · 5th Sem OS ·
+      Authors: Tejas Vilas Adhal (UID 24003010) &amp; Pawan Rathod (UID 24003119)
+    </div>
+  </div>
+  <button id="theme-toggle" aria-label="Toggle dark/light theme">🌙 Dark</button>
+</header>
+
+<!-- ======================================================
+     NAVIGATION
+     ====================================================== -->
+<nav id="main-nav" role="navigation" aria-label="Module navigation"></nav>
+
+<!-- ======================================================
+     MAIN CONTENT
+     ====================================================== -->
+<main role="main">
+
+  <!-- ========== HOME TAB ========== -->
+  <section data-tab="home">
+    <div class="card">
+      <h2>Problem Context: Banking &amp; ATM Transaction Processing</h2>
+      <p>
+        A bank processes <strong>ATM withdrawals, deposits, fund transfers, balance inquiries</strong>
+        and <strong>transaction logging</strong> concurrently. Requests arrive from ATMs and branches
+        (<b>producers</b>), wait in a bounded queue, and are executed by transaction-processing threads
+        (<b>consumers</b>). The OS must <b>schedule</b> them on the CPU,
+        <b>allocate memory</b> to each, and grant limited shared resources
+        (DB connections, transaction-service threads, ledger locks) only in a
+        <b>safe state</b> (Banker's Algorithm).
+      </p>
+
+      <table>
+        <tr>
+          <th>ID</th><th>Transaction Type</th><th>Arrival</th><th>Burst</th>
+          <th>Priority (1=highest)</th>
+        </tr>
+        <tr><td>T1</td><td>ATM Withdrawal</td>   <td>0</td><td>5</td><td>2</td></tr>
+        <tr><td>T2</td><td>Deposit</td>           <td>1</td><td>3</td><td>3</td></tr>
+        <tr><td>T3</td><td>Fund Transfer</td>     <td>2</td><td>8</td><td>1</td></tr>
+        <tr><td>T4</td><td>Balance Inquiry</td>   <td>3</td><td>2</td><td>4</td></tr>
+        <tr><td>T5</td><td>Transaction Logging</td><td>4</td><td>4</td><td>5</td></tr>
+      </table>
+
+      <p class="muted mt8">
+        Resources: R1 = DB connections (10), R2 = transaction-service threads (5),
+        R3 = ledger locks (7). Memory: 5 fixed partitions (100, 500, 200, 300, 600 KB).
+      </p>
+    </div>
+
+    <div class="home-grid">
+      <div class="module-card" data-goto="cpu" role="button" tabindex="0" aria-label="Go to CPU Scheduling module">
+        <div class="module-icon">⚙️</div>
+        <h3>CPU Scheduling</h3>
+        <p>FCFS, SJF, SRTF, Priority, Preemptive Priority, Round Robin — animated Gantt chart, ready-queue display</p>
+      </div>
+      <div class="module-card" data-goto="pc" role="button" tabindex="0" aria-label="Go to Producer-Consumer module">
+        <div class="module-icon">📦</div>
+        <h3>Producer–Consumer</h3>
+        <p>Animated bounded buffer with semaphores (empty, full, mutex), multiple producers/consumers, blocking states</p>
+      </div>
+      <div class="module-card" data-goto="bank" role="button" tabindex="0" aria-label="Go to Banker's Algorithm module">
+        <div class="module-icon">🔐</div>
+        <h3>Banker's Algorithm</h3>
+        <p>Step-by-step animated safety check, Work vector updates, resource-request grant/deny with roll-back</p>
+      </div>
+      <div class="module-card" data-goto="mem" role="button" tabindex="0" aria-label="Go to Memory Management module">
+        <div class="module-icon">🗂️</div>
+        <h3>Memory Management</h3>
+        <p>First/Best/Worst/Next Fit (fixed) + Dynamic Partitioning with Compaction — proportional memory map</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Verified Test Data</h2>
+      <p class="muted">Expected results with the default data (used in <code>tests.html</code>):</p>
+      <table>
+        <tr><th>Check</th><th>Expected Value</th></tr>
+        <tr><td>FCFS Avg Waiting Time</td>    <td>7.40</td></tr>
+        <tr><td>SJF Avg Waiting Time</td>     <td>5.20</td></tr>
+        <tr><td>Priority Avg Waiting Time</td><td>8.40</td></tr>
+        <tr><td>RR(q=2) Avg Waiting Time</td> <td>9.40</td></tr>
+        <tr><td>Banker's Safe Sequence</td>   <td>T2 → T4 → T5 → T1 → T3</td></tr>
+        <tr><td>T5 requests [3 3 0]</td>      <td>DENIED (unsafe)</td></tr>
+        <tr><td>Best Fit utilization</td>     <td>73.4%</td></tr>
+        <tr><td>Best Fit internal frag</td>   <td>453 KB</td></tr>
+        <tr><td>First Fit / Worst Fit</td>    <td>T4 unallocated (48.3%)</td></tr>
+      </table>
+      <div class="mt8">
+        <a href="tests.html" class="btn small">▶ Run Tests</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== CPU SCHEDULING TAB ========== -->
+  <section data-tab="cpu">
+    <div class="card">
+      <h2>⚙️ CPU Scheduling</h2>
+      <p class="muted">
+        Each row: <code>ID, arrival, burst, priority</code>.
+        Waiting time = Turnaround − Burst; Turnaround = Completion − Arrival.
+      </p>
+
+      <div class="field-group">
+        <label for="cpuIn">Transactions (ID, arrival, burst, priority)</label>
+        <textarea id="cpuIn" aria-label="Transaction data" rows="6">T1,0,5,2
+T2,1,3,3
+T3,2,8,1
+T4,3,2,4
+T5,4,4,5</textarea>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="cpuAlgo">Algorithm</label>
+          <select id="cpuAlgo" aria-label="Scheduling algorithm">
+            <option value="FCFS">FCFS – First-Come First-Served</option>
+            <option value="SJF">SJF – Shortest Job First (non-preemptive)</option>
+            <option value="SRTF">SRTF – Shortest Remaining Time (preemptive SJF)</option>
+            <option value="PRIORITY">Priority – Non-Preemptive</option>
+            <option value="PRIORITY_PRE">Priority – Preemptive</option>
+            <option value="RR">Round Robin</option>
+          </select>
+        </div>
+        <div>
+          <label for="cpuQ">Time Quantum (Round Robin)</label>
+          <input id="cpuQ" type="number" value="2" min="1" max="20" aria-label="Time quantum">
+        </div>
+      </div>
+
+      <div class="flex-row">
+        <button class="btn" onclick="runCPU()" aria-label="Run scheduling algorithm">▶ Run</button>
+        <button class="btn secondary" onclick="compareCPU()" aria-label="Compare all algorithms">⚖ Compare All</button>
+      </div>
+
+      <div id="cpuOut" class="mt8" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- ========== PRODUCER-CONSUMER TAB ========== -->
+  <section data-tab="pc">
+    <div class="card">
+      <h2>📦 Producer–Consumer (Bounded Buffer)</h2>
+      <p class="muted">
+        Producers = ATM / Branch requests. Consumers = transaction-processing threads.
+        Semaphores: <code>empty = N</code>, <code>full = 0</code>, <code>mutex = 1</code>.
+      </p>
+
+      <div class="row-3">
+        <div>
+          <label for="pcBufSize">Buffer Size (N)</label>
+          <input id="pcBufSize" type="number" value="4" min="1" max="10" aria-label="Buffer size">
+        </div>
+        <div>
+          <label for="pcNumProd">Number of Producers</label>
+          <input id="pcNumProd" type="number" value="2" min="1" max="4" aria-label="Number of producers">
+        </div>
+        <div>
+          <label for="pcNumCons">Number of Consumers</label>
+          <input id="pcNumCons" type="number" value="2" min="1" max="4" aria-label="Number of consumers">
+        </div>
+      </div>
+
+      <div class="pc-controls-row">
+        <button class="btn" onclick="pcProduce(0)" aria-label="Produce one item">+ Produce</button>
+        <button class="btn" onclick="pcConsume(0)" aria-label="Consume one item">− Consume</button>
+        <button class="btn secondary" id="pcAutoBtn" onclick="pcToggleAuto()" aria-label="Toggle auto mode">▶ Auto</button>
+        <button class="btn secondary" onclick="pcReset()" aria-label="Reset buffer">↺ Reset</button>
+        <label for="pcSpeed">Speed (ms):</label>
+        <input id="pcSpeed" type="range" min="200" max="2000" value="700" style="width:100px" aria-label="Auto speed">
+        <button class="btn small secondary" onclick="exportPC()" aria-label="Export log">⬇ Export Log</button>
+      </div>
+
+      <div id="pcLayout" aria-live="polite"></div>
+
+      <h3>Event Log</h3>
+      <div class="log" id="pcLog" aria-live="polite" aria-label="Producer-Consumer event log"></div>
+    </div>
+  </section>
+
+  <!-- ========== BANKER'S ALGORITHM TAB ========== -->
+  <section data-tab="bank">
+    <div class="card">
+      <h2>🔐 Deadlock Avoidance – Banker's Algorithm</h2>
+      <p class="muted">
+        Resources: R1 = DB connections (10), R2 = transaction-service threads (5),
+        R3 = ledger locks (7). Processes = T1–T5 (banking transactions).
+      </p>
+
+      <div class="row-3">
+        <div>
+          <label for="bAlloc">Allocation Matrix</label>
+          <textarea class="matrix-input" id="bAlloc" aria-label="Allocation matrix" rows="5">0 1 0
+2 0 0
+3 0 2
+2 1 1
+0 0 2</textarea>
+        </div>
+        <div>
+          <label for="bMax">Maximum Matrix</label>
+          <textarea class="matrix-input" id="bMax" aria-label="Maximum matrix" rows="5">7 5 3
+3 2 2
+9 0 2
+2 2 2
+4 3 3</textarea>
+        </div>
+        <div>
+          <label for="bAvail">Available Vector</label>
+          <textarea class="matrix-input" id="bAvail" aria-label="Available vector" rows="2">3 3 2</textarea>
+        </div>
+      </div>
+
+      <div class="flex-row">
+        <button class="btn" onclick="doBankerCheck()" aria-label="Run Banker's safety check">🔍 Check Safety</button>
+      </div>
+
+      <div id="bOut" class="mt8" aria-live="polite"></div>
+
+      <hr class="divider">
+
+      <h3>Resource Request Test</h3>
+      <p class="muted">
+        Try <strong>T5 requesting [3 3 0]</strong> (should be <span class="no-text">DENIED</span> – unsafe)
+        and <strong>T2 requesting [1 0 2]</strong> (should be <span class="ok-text">GRANTED</span>).
+      </p>
+
+      <div class="row">
+        <div>
+          <label for="rProcIdx">Process # (1-based)</label>
+          <input id="rProcIdx" type="number" value="5" min="1" aria-label="Process number">
+        </div>
+        <div>
+          <label for="rRequest">Request Vector (space-separated)</label>
+          <input id="rRequest" value="3 3 0" aria-label="Resource request vector">
+        </div>
+      </div>
+
+      <button class="btn secondary" onclick="doResourceRequest()" aria-label="Submit resource request">📤 Submit Request</button>
+      <div id="bRequestOut" class="mt8" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- ========== MEMORY MANAGEMENT TAB ========== -->
+  <section data-tab="mem">
+    <div class="card">
+      <h2>🗂️ Memory Management</h2>
+      <p class="muted">Sizes in KB. Hatched area = fragmentation. Red hatching = external fragmentation.</p>
+
+      <div class="row">
+        <div>
+          <label for="mPartitions">Free Partitions (comma-separated KB)</label>
+          <input id="mPartitions" value="100,500,200,300,600" aria-label="Partition sizes">
+        </div>
+        <div>
+          <label for="mRequests">Transaction Memory Requests (comma-separated KB)</label>
+          <input id="mRequests" value="212,417,112,426,80" aria-label="Memory requests">
+        </div>
+        <div>
+          <label for="mAlgo">Algorithm</label>
+          <select id="mAlgo" aria-label="Memory allocation algorithm">
+            <option value="first">First Fit</option>
+            <option value="best" selected>Best Fit</option>
+            <option value="worst">Worst Fit</option>
+            <option value="next">Next Fit</option>
+            <option value="dynamic">Dynamic (Variable) Partitioning</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex-row">
+        <button class="btn" onclick="runMemory()" aria-label="Allocate memory">📋 Allocate</button>
+        <button class="btn secondary" onclick="compareMemory()" aria-label="Compare all fixed algorithms">⚖ Compare Fixed Algorithms</button>
+      </div>
+
+      <div class="flex-row mt8">
+        <label for="mFreeProc" style="margin:0">Free process T#:</label>
+        <input id="mFreeProc" type="number" value="1" min="1" style="width:60px" aria-label="Process to free">
+        <button class="btn small secondary" onclick="freeProcess()" aria-label="Free a process from memory">🗑 Free</button>
+      </div>
+
+      <div id="mOut" class="mt8" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- ========== INTEGRATED RUN TAB ========== -->
+  <section data-tab="all">
+    <div class="card">
+      <h2>🔗 Integrated Pipeline</h2>
+      <p class="muted">
+        End-to-end animated pipeline: request arrives → buffer → scheduler →
+        Banker's safety check → memory allocation → completion → release.
+        Uses the default data from each module tab.
+      </p>
+      <div class="flex-row">
+        <button class="btn" onclick="runIntegrated()" aria-label="Run integrated scenario">▶ Run Integrated Scenario</button>
+      </div>
+      <div id="intOut" class="mt8" aria-live="polite"></div>
+    </div>
+  </section>
+
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

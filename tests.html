@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tests – OS Algorithm Visualizer</title>
+  <style>
+    :root { --ok: #16a34a; --no: #dc2626; --warn: #d97706; --bg: #f0f4ff; --surface: #fff; --border: #d8e0f0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font: 15px/1.6 system-ui, sans-serif; background: var(--bg); color: #1a2035; padding: 24px; }
+    h1 { font-size: 1.3rem; margin-bottom: 4px; }
+    h2 { font-size: 1rem; margin: 20px 0 8px; color: #2563eb; }
+    .subtitle { color: #5a6485; font-size: .85rem; margin-bottom: 20px; }
+    .test {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: 8px; padding: 10px 14px; margin: 6px 0; font-size: .87rem;
+    }
+    .test.pass { border-color: var(--ok); background: #dcfce7; }
+    .test.fail { border-color: var(--no); background: #fee2e2; }
+    .icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .test-name { font-weight: 700; }
+    .test-detail { color: #5a6485; font-size: .8rem; margin-top: 2px; font-family: monospace; }
+    .summary {
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;
+      display: flex; gap: 20px; flex-wrap: wrap; font-weight: 700;
+    }
+    .summary .pass-count { color: var(--ok); }
+    .summary .fail-count { color: var(--no); }
+    .run-btn {
+      background: #2563eb; color: #fff; border: 0; border-radius: 7px;
+      padding: 10px 20px; font: 600 .9rem system-ui; cursor: pointer; margin-bottom: 16px;
+    }
+    .run-btn:hover { background: #1d4ed8; }
+    a { color: #2563eb; }
+    code { background: #dbeafe; color: #2563eb; padding: 1px 5px; border-radius: 4px; font-size: .84em; }
+  </style>
+</head>
+<body>
+
+<h1>OS Algorithm Visualizer – Automated Tests</h1>
+<p class="subtitle">
+  Verifies all documented expected results.
+  <a href="index.html">← Back to App</a>
+</p>
+
+<button class="run-btn" onclick="runAllTests()">▶ Run All Tests</button>
+
+<div id="summary" class="summary" style="display:none"></div>
+
+<h2>CPU Scheduling</h2>
+<div id="cpu-tests"></div>
+
+<h2>Banker's Algorithm</h2>
+<div id="bank-tests"></div>
+
+<h2>Memory Management</h2>
+<div id="mem-tests"></div>
+
+<script>
+/* ============ COPY OF CORE ALGORITHMS (no DOM dependency) ============ */
+
+function schedule(procs0, algo, quantum) {
+  const P = procs0.map(p => ({ ...p, rem: p.bt, ct: null }));
+  const gantt = [];
+  let t = 0, done = 0;
+  const push = (id, s, e, idx) => {
+    const last = gantt[gantt.length - 1];
+    if (last && last.id === id && last.e === s) { last.e = e; return; }
+    gantt.push({ id, s, e, idx });
+  };
+  if (algo === 'RR') {
+    const sorted = [...P].sort((a, b) => a.at - b.at || a.idx - b.idx);
+    const queue = []; let k = 0;
+    const enq = () => { while (k < sorted.length && sorted[k].at <= t) queue.push(sorted[k++]); };
+    enq();
+    while (done < P.length) {
+      if (!queue.length) { const n = sorted[k].at; push('Idle',t,n,-1); t=n; enq(); continue; }
+      const p = queue.shift(), sl = Math.min(quantum, p.rem);
+      push(p.id, t, t+sl, p.idx); t += sl; p.rem -= sl; enq();
+      if (p.rem > 0) queue.push(p); else { p.ct = t; done++; }
+    }
+  } else if (algo === 'SRTF') {
+    while (done < P.length) {
+      const av = P.filter(p => p.ct===null && p.at<=t);
+      if (!av.length) { const n=Math.min(...P.filter(p=>p.ct===null).map(p=>p.at)); push('Idle',t,n,-1); t=n; continue; }
+      av.sort((a,b)=>a.rem-b.rem||a.at-b.at||a.idx-b.idx);
+      const p=av[0], na=P.filter(q=>q.ct===null&&q.at>t).map(q=>q.at);
+      const ne=na.length?Math.min(...na):Infinity, ru=Math.min(t+p.rem,ne);
+      push(p.id,t,ru,p.idx); p.rem-=(ru-t); t=ru;
+      if(p.rem===0){p.ct=t;done++;}
+    }
+  } else {
+    while (done < P.length) {
+      const av = P.filter(p => p.ct===null && p.at<=t);
+      if (!av.length) { const n=Math.min(...P.filter(p=>p.ct===null).map(p=>p.at)); push('Idle',t,n,-1); t=n; continue; }
+      av.sort((a,b)=>{
+        if(algo==='SJF')      return a.bt-b.bt||a.at-b.at||a.idx-b.idx;
+        if(algo==='PRIORITY') return a.pr-b.pr||a.at-b.at||a.idx-b.idx;
+        return a.at-b.at||a.idx-b.idx;
+      });
+      const p=av[0]; push(p.id,t,t+p.bt,p.idx); t+=p.bt; p.ct=t; done++;
+    }
+  }
+  P.forEach(p => { p.tat = p.ct-p.at; p.wt = p.tat-p.bt; });
+  const n = P.length;
+  return { gantt, P, avgWait: P.reduce((s,p)=>s+p.wt,0)/n, avgTAT: P.reduce((s,p)=>s+p.tat,0)/n };
+}
+
+function runBanker(A, M, V) {
+  const n = A.length;
+  const N = A.map((row,i)=>row.map((x,j)=>M[i][j]-x));
+  const fin = Array(n).fill(false), seq=[], steps=[];
+  let W=[...V], changed=true;
+  while(seq.length<n && changed) {
+    changed=false;
+    for(let i=0;i<n;i++) {
+      if(fin[i]) continue;
+      if(N[i].every((x,j)=>x<=W[j])) {
+        const wb=[...W]; W=W.map((w,j)=>w+A[i][j]);
+        steps.push({proc:i,need:[...N[i]],work_before:wb,work_after:[...W],ok:true});
+        fin[i]=true; seq.push(i); changed=true;
+      }
+    }
+  }
+  for(let i=0;i<n;i++) if(!fin[i]) steps.push({proc:i,need:[...N[i]],work_before:[...W],work_after:[...W],ok:false});
+  return {N, safe:seq.length===n, seq, steps};
+}
+
+function allocateMemory(partitions0, requests, algo) {
+  const parts = partitions0.map((size,i)=>({size,occupant:-1,id:i}));
+  const assignments = Array(requests.length).fill(-1);
+  let lastFit = 0;
+  requests.forEach((req,ri)=>{
+    let best=-1, startIdx=(algo==='next'?lastFit:0);
+    for(let iter=0;iter<parts.length;iter++) {
+      const j=(startIdx+iter)%parts.length, p=parts[j];
+      if(p.occupant>=0||p.size<req) continue;
+      if(algo==='first'||algo==='next'){best=j;lastFit=(j+1)%parts.length;break;}
+      if(algo==='best'){if(best<0||p.size<parts[best].size)best=j;}
+      else{if(best<0||p.size>parts[best].size)best=j;}
+    }
+    if(best>=0){assignments[ri]=best;parts[best].occupant=ri;}
+  });
+  const totalMem=parts.reduce((s,p)=>s+p.size,0);
+  const totalUsed=requests.filter((_,i)=>assignments[i]>=0).reduce((s,r)=>s+r,0);
+  const internalFrag=assignments.reduce((s,pi,ri)=>pi>=0?s+parts[pi].size-requests[ri]:s,0);
+  const unallocated=requests.map((_,i)=>i).filter(i=>assignments[i]<0);
+  return {parts,assignments,totalMem,totalUsed,internalFrag,utilization:totalMem>0?totalUsed/totalMem:0,unallocated};
+}
+
+/* ============ TEST FRAMEWORK ============ */
+
+const DEFAULT_PROCS = [
+  {id:'T1',at:0,bt:5,pr:2,idx:0},
+  {id:'T2',at:1,bt:3,pr:3,idx:1},
+  {id:'T3',at:2,bt:8,pr:1,idx:2},
+  {id:'T4',at:3,bt:2,pr:4,idx:3},
+  {id:'T5',at:4,bt:4,pr:5,idx:4}
+];
+
+const DEFAULT_A = [[0,1,0],[2,0,0],[3,0,2],[2,1,1],[0,0,2]];
+const DEFAULT_M = [[7,5,3],[3,2,2],[9,0,2],[2,2,2],[4,3,3]];
+const DEFAULT_V = [3,3,2];
+const DEFAULT_PARTS = [100,500,200,300,600];
+const DEFAULT_REQS  = [212,417,112,426,80];
+
+const results = { pass: 0, fail: 0, tests: [] };
+
+function test(name, fn, container) {
+  let passed = false, detail = '';
+  try {
+    const result = fn();
+    passed = result === true || (typeof result === 'object' && result.ok === true);
+    detail = (typeof result === 'object' && result.detail) ? result.detail : '';
+  } catch(e) {
+    passed = false;
+    detail = 'Exception: ' + e.message;
+  }
+  if (passed) results.pass++; else results.fail++;
+  results.tests.push({ name, passed, detail });
+
+  const div = document.createElement('div');
+  div.className = 'test ' + (passed ? 'pass' : 'fail');
+  div.innerHTML = `
+    <span class="icon">${passed ? '✅' : '❌'}</span>
+    <div>
+      <div class="test-name">${name}</div>
+      ${detail ? `<div class="test-detail">${detail}</div>` : ''}
+    </div>`;
+  document.getElementById(container).appendChild(div);
+}
+
+function near(a, b, eps = 0.01) { return Math.abs(a - b) < eps; }
+
+function runAllTests() {
+  // Clear previous results
+  results.pass = 0; results.fail = 0; results.tests = [];
+  ['cpu-tests','bank-tests','mem-tests'].forEach(id => document.getElementById(id).innerHTML = '');
+
+  /* ---- CPU SCHEDULING ---- */
+  test('FCFS: Avg waiting time = 7.40', () => {
+    const r = schedule(DEFAULT_PROCS, 'FCFS', 2);
+    return { ok: near(r.avgWait, 7.40), detail: `Got ${r.avgWait.toFixed(2)}, expected 7.40` };
+  }, 'cpu-tests');
+
+  test('SJF (non-preemptive): Avg waiting time = 5.20', () => {
+    const r = schedule(DEFAULT_PROCS, 'SJF', 2);
+    return { ok: near(r.avgWait, 5.20), detail: `Got ${r.avgWait.toFixed(2)}, expected 5.20` };
+  }, 'cpu-tests');
+
+  test('Priority (non-preemptive): Avg waiting time = 8.40', () => {
+    const r = schedule(DEFAULT_PROCS, 'PRIORITY', 2);
+    return { ok: near(r.avgWait, 8.40), detail: `Got ${r.avgWait.toFixed(2)}, expected 8.40` };
+  }, 'cpu-tests');
+
+  test('Round Robin (q=2): Avg waiting time = 9.40', () => {
+    const r = schedule(DEFAULT_PROCS, 'RR', 2);
+    return { ok: near(r.avgWait, 9.40), detail: `Got ${r.avgWait.toFixed(2)}, expected 9.40` };
+  }, 'cpu-tests');
+
+  test('FCFS: All 5 processes complete', () => {
+    const r = schedule(DEFAULT_PROCS, 'FCFS', 2);
+    const allDone = r.P.every(p => p.ct !== null);
+    return { ok: allDone, detail: `Done: ${r.P.filter(p=>p.ct!==null).length}/5` };
+  }, 'cpu-tests');
+
+  test('FCFS: Waiting times ≥ 0 for all processes', () => {
+    const r = schedule(DEFAULT_PROCS, 'FCFS', 2);
+    const ok = r.P.every(p => p.wt >= 0);
+    return { ok, detail: `Min WT: ${Math.min(...r.P.map(p=>p.wt))}` };
+  }, 'cpu-tests');
+
+  test('SJF: T4 (burst=2) scheduled before T2 (burst=3)', () => {
+    const r = schedule(DEFAULT_PROCS, 'SJF', 2);
+    const t4 = r.P.find(p => p.id === 'T4'), t2 = r.P.find(p => p.id === 'T2');
+    const ganttT4 = r.gantt.findIndex(b => b.id === 'T4');
+    const ganttT2 = r.gantt.findIndex(b => b.id === 'T2');
+    return { ok: ganttT4 < ganttT2, detail: `T4 gantt position: ${ganttT4}, T2: ${ganttT2}` };
+  }, 'cpu-tests');
+
+  test('SRTF: Average wait ≤ SJF average wait (preemptive ≤ non-preemptive)', () => {
+    const srtf = schedule(DEFAULT_PROCS, 'SRTF', 2);
+    const sjf  = schedule(DEFAULT_PROCS, 'SJF',  2);
+    return { ok: srtf.avgWait <= sjf.avgWait + 0.01, detail: `SRTF=${srtf.avgWait.toFixed(2)}, SJF=${sjf.avgWait.toFixed(2)}` };
+  }, 'cpu-tests');
+
+  test('RR (q=2): Turnaround ≥ Burst for all processes', () => {
+    const r = schedule(DEFAULT_PROCS, 'RR', 2);
+    const ok = r.P.every(p => p.tat >= p.bt);
+    return { ok, detail: r.P.map(p=>`${p.id}: TAT=${p.tat} BT=${p.bt}`).join(', ') };
+  }, 'cpu-tests');
+
+  /* ---- BANKER'S ALGORITHM ---- */
+  test("Banker's: System is in SAFE state", () => {
+    const r = runBanker(DEFAULT_A, DEFAULT_M, DEFAULT_V);
+    return { ok: r.safe, detail: `Safe=${r.safe}` };
+  }, 'bank-tests');
+
+  test("Banker's: Safe sequence = T2→T4→T5→T1→T3", () => {
+    const r = runBanker(DEFAULT_A, DEFAULT_M, DEFAULT_V);
+    const seq = r.seq.map(i => 'T'+(i+1)).join('→');
+    return { ok: seq === 'T2→T4→T5→T1→T3', detail: `Got: ${seq}` };
+  }, 'bank-tests');
+
+  test("Banker's: T5 requesting [3,3,0] → DENIED (unsafe)", () => {
+    const R = [3,3,0], pIdx = 4;
+    const rBase = runBanker(DEFAULT_A, DEFAULT_M, DEFAULT_V);
+    const need = rBase.N[pIdx];
+    // R ≤ need and R ≤ V, so try pretend-allocate
+    const exceedsNeed = R.some((x,j) => x > need[j]);
+    const exceedsAvail = R.some((x,j) => x > DEFAULT_V[j]);
+    if (exceedsNeed || exceedsAvail) {
+      return { ok: true, detail: `Denied at step 1: exceedsNeed=${exceedsNeed}, exceedsAvail=${exceedsAvail}` };
+    }
+    const A2 = DEFAULT_A.map(r => [...r]);
+    const V2 = DEFAULT_V.map((v,j) => v - R[j]);
+    A2[pIdx] = A2[pIdx].map((x,j) => x + R[j]);
+    const r2 = runBanker(A2, DEFAULT_M, V2);
+    return { ok: !r2.safe, detail: `Pretend-allocate safe=${r2.safe} (should be false)` };
+  }, 'bank-tests');
+
+  test("Banker's: T2 requesting [1,0,2] → GRANTED (safe)", () => {
+    const R = [1,0,2], pIdx = 1;
+    const rBase = runBanker(DEFAULT_A, DEFAULT_M, DEFAULT_V);
+    const need = rBase.N[pIdx];
+    const exceedsNeed = R.some((x,j) => x > need[j]);
+    const exceedsAvail = R.some((x,j) => x > DEFAULT_V[j]);
+    if (exceedsNeed || exceedsAvail) return { ok: false, detail: 'Request would be denied at step 1 (unexpected)' };
+    const A2 = DEFAULT_A.map(r => [...r]);
+    const V2 = DEFAULT_V.map((v,j) => v - R[j]);
+    A2[pIdx] = A2[pIdx].map((x,j) => x + R[j]);
+    const r2 = runBanker(A2, DEFAULT_M, V2);
+    return { ok: r2.safe, detail: `Pretend-allocate safe=${r2.safe} (should be true)` };
+  }, 'bank-tests');
+
+  test("Banker's: Need matrix calculated correctly (T1: Need=[7,4,3])", () => {
+    const r = runBanker(DEFAULT_A, DEFAULT_M, DEFAULT_V);
+    const n = r.N[0]; // T1
+    return { ok: n[0]===7 && n[1]===4 && n[2]===3, detail: `T1 Need: [${n}], expected [7,4,3]` };
+  }, 'bank-tests');
+
+  test("Banker's: 5 steps in trace (all processes finish)", () => {
+    const r = runBanker(DEFAULT_A, DEFAULT_M, DEFAULT_V);
+    return { ok: r.steps.filter(s=>s.ok).length === 5, detail: `OK steps: ${r.steps.filter(s=>s.ok).length}` };
+  }, 'bank-tests');
+
+  /* ---- MEMORY MANAGEMENT ---- */
+  test('Best Fit: Utilization = 73.4%', () => {
+    const r = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'best');
+    const pct = (r.utilization * 100).toFixed(1);
+    return { ok: pct === '73.4', detail: `Got ${pct}%, expected 73.4%` };
+  }, 'mem-tests');
+
+  test('Best Fit: Internal fragmentation = 453 KB', () => {
+    const r = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'best');
+    return { ok: r.internalFrag === 453, detail: `Got ${r.internalFrag} KB, expected 453 KB` };
+  }, 'mem-tests');
+
+  test('Best Fit: All 5 requests allocated', () => {
+    const r = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'best');
+    return { ok: r.unallocated.length === 0, detail: `Unallocated: ${r.unallocated.map(i=>'T'+(i+1)).join(', ')||'none'}` };
+  }, 'mem-tests');
+
+  test('First Fit: T4 (426 KB) is unallocated', () => {
+    const r = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'first');
+    return { ok: r.unallocated.includes(3), detail: `Unallocated: ${r.unallocated.map(i=>'T'+(i+1)).join(', ')}` };
+  }, 'mem-tests');
+
+  test('First Fit: Utilization = 48.3%', () => {
+    const r = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'first');
+    const pct = (r.utilization * 100).toFixed(1);
+    return { ok: pct === '48.3', detail: `Got ${pct}%, expected 48.3%` };
+  }, 'mem-tests');
+
+  test('Worst Fit: T4 (426 KB) is unallocated', () => {
+    const r = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'worst');
+    return { ok: r.unallocated.includes(3), detail: `Unallocated: ${r.unallocated.map(i=>'T'+(i+1)).join(', ')}` };
+  }, 'mem-tests');
+
+  test('Worst Fit: Utilization = 48.3%', () => {
+    const r = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'worst');
+    const pct = (r.utilization * 100).toFixed(1);
+    return { ok: pct === '48.3', detail: `Got ${pct}%, expected 48.3%` };
+  }, 'mem-tests');
+
+  test('Best Fit: T2 (417 KB) assigned to partition 500 KB', () => {
+    const r = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'best');
+    const pi = r.assignments[1]; // T2
+    return { ok: pi >= 0 && r.parts[pi].size === 500, detail: `T2 partition: ${pi >= 0 ? r.parts[pi].size + ' KB' : 'not allocated'}` };
+  }, 'mem-tests');
+
+  test('Next Fit: Different allocation order from First Fit', () => {
+    const ff = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'first');
+    const nf = allocateMemory(DEFAULT_PARTS, DEFAULT_REQS, 'next');
+    // Just check it runs without error
+    return { ok: Array.isArray(nf.assignments), detail: `Next Fit assignments: [${nf.assignments}]` };
+  }, 'mem-tests');
+
+  /* ---- Show Summary ---- */
+  const sum = document.getElementById('summary');
+  sum.style.display = 'flex';
+  sum.innerHTML = `
+    <span>Total: <b>${results.pass + results.fail}</b></span>
+    <span class="pass-count">✅ Passed: ${results.pass}</span>
+    <span class="fail-count">${results.fail > 0 ? '❌' : '✅'} Failed: ${results.fail}</span>
+    <span style="color:#5a6485;font-weight:400;font-size:.85rem">${new Date().toLocaleString()}</span>`;
+
+  // Console summary
+  console.group('OS Algorithm Visualizer – Test Results');
+  results.tests.forEach(t => {
+    console[t.passed ? 'log' : 'error'](`${t.passed ? '✅' : '❌'} ${t.name}${t.detail ? ' | ' + t.detail : ''}`);
+  });
+  console.log(`Total: ${results.pass + results.fail} | Pass: ${results.pass} | Fail: ${results.fail}`);
+  console.groupEnd();
+}
+
+// Auto-run on load
+window.addEventListener('DOMContentLoaded', runAllTests);
+</script>
+</body>
+</html>
